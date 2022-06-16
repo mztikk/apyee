@@ -1,0 +1,16 @@
+[package]
+name = "apyee"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+get_params_derive = "0.1.0"
+quote = "1.0.18"
+serde = { version = "1.0.137", features = ["derive"] }
+serde_json = "1.0.81"
+serde_variant = "0.1.1"
+syn = "1.0.96"
+thiserror = "1.0.31"
+tokio = { version = "1.19.2", features = ["full"] }
