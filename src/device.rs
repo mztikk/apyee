@@ -188,9 +188,7 @@ impl Device {
         let mut buffer = [0u8; 1024];
         loop {
             // wait for data to become available and readable
-            if (reader.readable().await).is_err() {
-                continue;
-            }
+            reader.readable().await?;
 
             // read the data
             match reader.try_read(&mut buffer) {
