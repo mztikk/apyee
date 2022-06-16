@@ -81,8 +81,11 @@ pub struct Device {
     command_id: UniqueCommandId,
 }
 
+type ExecutionResult = Result<CommandResponse, DeviceError>;
+type DeviceResult = Result<Device, DeviceError>;
+
 impl Device {
-    pub async fn new_with_port(ip: IpAddr, port: u16) -> Result<Device, DeviceError> {
+    pub async fn new_with_port(ip: IpAddr, port: u16) -> DeviceResult {
         let (read, write) = TcpStream::connect(SocketAddr::new(ip, port))
             .await?
             .into_split();
@@ -101,7 +104,7 @@ impl Device {
         Ok(device)
     }
 
-    pub async fn new(ip: IpAddr) -> Result<Device, DeviceError> {
+    pub async fn new(ip: IpAddr) -> DeviceResult {
         Self::new_with_port(ip, DEFAULT_PORT).await
     }
 
@@ -109,43 +112,35 @@ impl Device {
         (r as i32) << 16 | (g as i32) << 8 | (b as i32)
     }
 
-    pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> Result<CommandResponse, DeviceError> {
+    pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
         self.execute_method(Method::SetRgb(Self::get_rgb_color(r, g, b)))
             .await
     }
 
-    pub async fn set_bg_rgb(
-        &mut self,
-        r: u8,
-        g: u8,
-        b: u8,
-    ) -> Result<CommandResponse, DeviceError> {
+    pub async fn set_bg_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
         self.execute_method(Method::BgSetRgb(Self::get_rgb_color(r, g, b)))
             .await
     }
 
-    pub async fn toggle(&mut self) -> Result<CommandResponse, DeviceError> {
+    pub async fn toggle(&mut self) -> ExecutionResult {
         self.execute_method(Method::Toggle).await
     }
 
-    pub async fn power_on(&mut self) -> Result<CommandResponse, DeviceError> {
+    pub async fn power_on(&mut self) -> ExecutionResult {
         self.execute_method(Method::SetPower(true)).await
     }
 
-    pub async fn power_off(&mut self) -> Result<CommandResponse, DeviceError> {
+    pub async fn power_off(&mut self) -> ExecutionResult {
         self.execute_method(Method::SetPower(false)).await
     }
 
-    pub async fn execute_method(&mut self, method: Method) -> Result<CommandResponse, DeviceError> {
+    pub async fn execute_method(&mut self, method: Method) -> ExecutionResult {
         let command = Command::new(self.command_id.next(), method);
 
         self.execute_command(command).await
     }
 
-    pub async fn execute_command(
-        &mut self,
-        command: Command,
-    ) -> Result<CommandResponse, DeviceError> {
+    pub async fn execute_command(&mut self, command: Command) -> ExecutionResult {
         // terminate every message with \r\n"
         let json = format!("{}\r\n", serde_json::to_string(&command)?);
         self.tcp_writer.write_all(json.as_bytes()).await?;
