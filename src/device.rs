@@ -54,9 +54,9 @@ impl Responses {
         }
     }
 
-    fn add(&mut self, id: usize, response: CommandResponse) {
+    fn add(&mut self, response: CommandResponse) {
         self.notify.notify_one();
-        self.responses.insert(id, response);
+        self.responses.insert(response.id, response);
     }
 
     fn consume(&mut self, id: usize) -> Option<CommandResponse> {
@@ -198,7 +198,7 @@ impl Device {
                     let entries = data.split("\r\n");
                     for entry in entries {
                         let response: CommandResponse = serde_json::from_str(entry)?;
-                        responses.write().await.add(response.id, response);
+                        responses.write().await.add(response);
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
