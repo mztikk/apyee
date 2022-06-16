@@ -89,7 +89,7 @@ impl Device {
         let responses = Arc::new(Mutex::new(Responses::new()));
         let responses_clone = Arc::clone(&responses);
 
-        let device = Device {
+        let device = Self {
             tcp_writer: write,
             ip,
             port,
@@ -97,9 +97,13 @@ impl Device {
             command_id: UniqueCommandId::new(),
         };
 
-        tokio::spawn(Device::listen_responses(read, responses_clone));
+        tokio::spawn(Self::listen_responses_console_error(read, responses_clone));
 
         Ok(device)
+    }
+
+    pub async fn new(ip: String) -> Result<Device, DeviceError> {
+        Self::new_with_port(ip, DEFAULT_PORT).await
     }
 
     pub const fn get_rgb_color(r: u8, g: u8, b: u8) -> i32 {
@@ -109,8 +113,40 @@ impl Device {
     pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> Result<CommandResponse, DeviceError> {
         let command = Command::new(
             self.command_id.next(),
-            Method::SetRgb(Device::get_rgb_color(r, g, b)),
+            Method::SetRgb(Self::get_rgb_color(r, g, b)),
         );
+
+        self.execute_command(command).await
+    }
+
+    pub async fn set_bg_rgb(
+        &mut self,
+        r: u8,
+        g: u8,
+        b: u8,
+    ) -> Result<CommandResponse, DeviceError> {
+        let command = Command::new(
+            self.command_id.next(),
+            Method::BgSetRgb(Self::get_rgb_color(r, g, b)),
+        );
+
+        self.execute_command(command).await
+    }
+
+    pub async fn toggle(&mut self) -> Result<CommandResponse, DeviceError> {
+        let command = Command::new(self.command_id.next(), Method::Toggle);
+
+        self.execute_command(command).await
+    }
+
+    pub async fn power_on(&mut self) -> Result<CommandResponse, DeviceError> {
+        let command = Command::new(self.command_id.next(), Method::SetPower(true));
+
+        self.execute_command(command).await
+    }
+
+    pub async fn power_off(&mut self) -> Result<CommandResponse, DeviceError> {
+        let command = Command::new(self.command_id.next(), Method::SetPower(false));
 
         self.execute_command(command).await
     }
@@ -176,6 +212,18 @@ impl Device {
                 Err(e) => {
                     return Err(e.into());
                 }
+            }
+        }
+    }
+
+    async fn listen_responses_console_error(
+        reader: OwnedReadHalf,
+        responses: Arc<Mutex<Responses>>,
+    ) {
+        match Self::listen_responses(reader, responses).await {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("{}", e);
             }
         }
     }
