@@ -110,12 +110,8 @@ impl Device {
     }
 
     pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> Result<CommandResponse, DeviceError> {
-        let command = Command::new(
-            self.command_id.next(),
-            Method::SetRgb(Self::get_rgb_color(r, g, b)),
-        );
-
-        self.execute_command(command).await
+        self.execute_method(Method::SetRgb(Self::get_rgb_color(r, g, b)))
+            .await
     }
 
     pub async fn set_bg_rgb(
@@ -124,30 +120,20 @@ impl Device {
         g: u8,
         b: u8,
     ) -> Result<CommandResponse, DeviceError> {
-        let command = Command::new(
-            self.command_id.next(),
-            Method::BgSetRgb(Self::get_rgb_color(r, g, b)),
-        );
-
-        self.execute_command(command).await
+        self.execute_method(Method::BgSetRgb(Self::get_rgb_color(r, g, b)))
+            .await
     }
 
     pub async fn toggle(&mut self) -> Result<CommandResponse, DeviceError> {
-        let command = Command::new(self.command_id.next(), Method::Toggle);
-
-        self.execute_command(command).await
+        self.execute_method(Method::Toggle).await
     }
 
     pub async fn power_on(&mut self) -> Result<CommandResponse, DeviceError> {
-        let command = Command::new(self.command_id.next(), Method::SetPower(true));
-
-        self.execute_command(command).await
+        self.execute_method(Method::SetPower(true)).await
     }
 
     pub async fn power_off(&mut self) -> Result<CommandResponse, DeviceError> {
-        let command = Command::new(self.command_id.next(), Method::SetPower(false));
-
-        self.execute_command(command).await
+        self.execute_method(Method::SetPower(false)).await
     }
 
     pub async fn execute_method(&mut self, method: Method) -> Result<CommandResponse, DeviceError> {
