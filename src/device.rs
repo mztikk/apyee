@@ -185,7 +185,7 @@ impl Device {
         reader: OwnedReadHalf,
         responses: Arc<RwLock<Responses>>,
     ) -> Result<(), DeviceError> {
-        let mut buffer = [0u8; 1024];
+        let mut buffer = [0u8; 8192];
         loop {
             // wait for data to become available and readable
             reader.readable().await?;
