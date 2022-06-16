@@ -4,6 +4,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
+    net::{IpAddr, SocketAddr},
     sync::{atomic::AtomicUsize, Arc},
 };
 use thiserror::Error;
@@ -75,16 +76,14 @@ impl Responses {
 }
 
 pub struct Device {
-    pub ip: String,
-    pub port: u16,
     responses: Arc<RwLock<Responses>>,
     tcp_writer: OwnedWriteHalf,
     command_id: UniqueCommandId,
 }
 
 impl Device {
-    pub async fn new_with_port(ip: String, port: u16) -> Result<Device, DeviceError> {
-        let (read, write) = TcpStream::connect(format!("{}:{}", ip, port))
+    pub async fn new_with_port(ip: IpAddr, port: u16) -> Result<Device, DeviceError> {
+        let (read, write) = TcpStream::connect(SocketAddr::new(ip, port))
             .await?
             .into_split();
 
@@ -93,8 +92,6 @@ impl Device {
 
         let device = Self {
             tcp_writer: write,
-            ip,
-            port,
             responses,
             command_id: UniqueCommandId::new(),
         };
@@ -104,7 +101,7 @@ impl Device {
         Ok(device)
     }
 
-    pub async fn new(ip: String) -> Result<Device, DeviceError> {
+    pub async fn new(ip: IpAddr) -> Result<Device, DeviceError> {
         Self::new_with_port(ip, DEFAULT_PORT).await
     }
 
