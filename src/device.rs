@@ -1,18 +1,18 @@
+use crate::{
+    command::{Command, CommandResponse},
+    method::Method,
+};
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicUsize, Arc},
 };
-
 use thiserror::Error;
+use tokio::io;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::AsyncWriteExt,
     net::TcpStream,
-    sync::Mutex,
-};
-
-use crate::{
-    command::{Command, CommandResult},
-    method::Method,
+    sync::{Mutex, Notify},
 };
 
 pub const DEFAULT_PORT: u16 = 55443;
@@ -25,6 +25,8 @@ pub enum DeviceError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Timeout(#[from] tokio::time::error::Elapsed),
+    #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
 }
 
 struct UniqueCommandId {
@@ -44,22 +46,29 @@ impl UniqueCommandId {
 }
 
 struct Responses {
-    responses: HashMap<usize, CommandResult>,
+    responses: HashMap<usize, CommandResponse>,
+    notify: Notify,
 }
 
 impl Responses {
     fn new() -> Self {
         Self {
             responses: HashMap::new(),
+            notify: Notify::new(),
         }
     }
 
-    fn add(&mut self, id: usize, response: CommandResult) {
+    fn add(&mut self, id: usize, response: CommandResponse) {
+        self.notify.notify_one();
         self.responses.insert(id, response);
     }
 
-    fn consume(&mut self, id: usize) -> Option<CommandResult> {
+    fn consume(&mut self, id: usize) -> Option<CommandResponse> {
         self.responses.remove(&id)
+    }
+
+    async fn wait(&self) {
+        self.notify.notified().await;
     }
 }
 
@@ -67,16 +76,19 @@ pub struct Device {
     pub ip: String,
     pub port: u16,
     responses: Arc<Mutex<Responses>>,
-    tcp_writer: WriteHalf<TcpStream>,
+    tcp_writer: OwnedWriteHalf,
     command_id: UniqueCommandId,
 }
 
 impl Device {
     pub async fn new_with_port(ip: String, port: u16) -> Result<Device, DeviceError> {
-        let tcp_stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
-        let (read, write) = tokio::io::split(tcp_stream);
+        let (read, write) = TcpStream::connect(format!("{}:{}", ip, port))
+            .await?
+            .into_split();
+
         let responses = Arc::new(Mutex::new(Responses::new()));
         let responses_clone = Arc::clone(&responses);
+
         let device = Device {
             tcp_writer: write,
             ip,
@@ -90,20 +102,20 @@ impl Device {
         Ok(device)
     }
 
-    pub const fn get_rgb_color(&self, r: u8, g: u8, b: u8) -> i32 {
+    pub const fn get_rgb_color(r: u8, g: u8, b: u8) -> i32 {
         (r as i32) << 16 | (g as i32) << 8 | (b as i32)
     }
 
-    pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> Result<CommandResult, DeviceError> {
+    pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> Result<CommandResponse, DeviceError> {
         let command = Command::new(
             self.command_id.next(),
-            Method::SetRgb(self.get_rgb_color(r, g, b)),
+            Method::SetRgb(Device::get_rgb_color(r, g, b)),
         );
 
         self.execute_command(command).await
     }
 
-    pub async fn execute_method(&mut self, method: Method) -> Result<CommandResult, DeviceError> {
+    pub async fn execute_method(&mut self, method: Method) -> Result<CommandResponse, DeviceError> {
         let command = Command::new(self.command_id.next(), method);
 
         self.execute_command(command).await
@@ -112,34 +124,59 @@ impl Device {
     pub async fn execute_command(
         &mut self,
         command: Command,
-    ) -> Result<CommandResult, DeviceError> {
+    ) -> Result<CommandResponse, DeviceError> {
         // terminate every message with \r\n"
         let json = format!("{}\r\n", serde_json::to_string(&command)?);
         self.tcp_writer.write_all(json.as_bytes()).await?;
 
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
-            // wait for response listener with new response of our id
-            self.responses.lock().await.consume(command.id).unwrap()
+            let mut responses = self.responses.lock().await;
+
+            // check if we already have a response for this command
+            if let Some(response) = responses.consume(command.id) {
+                return Some(response);
+            }
+
+            // otherwise wait for a new response
+            loop {
+                responses.wait().await;
+
+                if let Some(response) = responses.consume(command.id) {
+                    return Some(response);
+                }
+            }
         })
         .await?;
 
-        Ok(result)
+        Ok(unsafe { result.unwrap_unchecked() })
     }
 
     async fn listen_responses(
-        mut reader: ReadHalf<TcpStream>,
+        reader: OwnedReadHalf,
         responses: Arc<Mutex<Responses>>,
     ) -> Result<(), DeviceError> {
         let mut buffer = [0u8; 1024];
-        let mut response = String::new();
         loop {
-            let n = reader.read(&mut buffer).await?;
-            if n == 0 {
-                break;
+            // wait for data to become available and readable
+            if (reader.readable().await).is_err() {
+                continue;
             }
-            response.push_str(&String::from_utf8_lossy(&buffer[..n]));
-        }
 
-        Ok(())
+            // read the data
+            match reader.try_read(&mut buffer) {
+                Ok(n) => {
+                    // parse the json
+                    let data = std::str::from_utf8(&buffer[..n])?;
+                    let response: CommandResponse = serde_json::from_str(data)?;
+                    responses.lock().await.add(response.id, response);
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
     }
 }

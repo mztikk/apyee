@@ -10,7 +10,7 @@ where
     serializer.serialize_str(name)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Command {
     pub(crate) id: usize,
@@ -29,14 +29,21 @@ impl Command {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CommandResult {
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct CommandResponse {
     pub id: usize,
-    pub error: Option<CommandErrorResult>,
+    pub result: Vec<CommandResult>,
+    pub error: Option<CommandResponseError>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CommandErrorResult {
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandResult {
+    Ok,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct CommandResponseError {
     pub code: i32,
     pub message: String,
 }
