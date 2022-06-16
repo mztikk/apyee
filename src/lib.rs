@@ -1,6 +1,7 @@
 pub mod command;
 pub mod device;
 pub mod method;
+pub mod property;
 
 #[cfg(test)]
 mod tests {
@@ -8,6 +9,7 @@ mod tests {
         command::{self, CommandResponse, CommandResult},
         device::Device,
         method::{Effect, Method},
+        property::Property,
     };
 
     #[test]
@@ -28,6 +30,19 @@ mod tests {
         assert_eq!(
             json,
             r#"{"id":0,"method":"set_rgb","params":[16711680,"smooth",500]}"#
+        );
+    }
+
+    #[test]
+    fn command_get_prop_serialization() {
+        let command = command::Command::new(
+            0,
+            Method::GetProps(vec![Property::Power, Property::Rgb, Property::BgRgb]),
+        );
+        let json = serde_json::to_string(&command).unwrap();
+        assert_eq!(
+            json,
+            r#"{"id":0,"method":"get_prop","params":["power","rgb","bg_rgb"]}"#
         );
     }
 

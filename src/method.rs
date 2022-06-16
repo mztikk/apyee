@@ -1,9 +1,13 @@
-use get_params_derive::GetParams;
+use crate::property::Property;
+use get_params_derive::{GetParams, IntoJsonValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, GetParams, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
+    GetProp(Property),
+    #[serde(rename = "get_prop")]
+    GetProps(Vec<Property>),
     Toggle,
     SetPower(bool),
     #[serde(rename = "set_power")]
@@ -17,18 +21,9 @@ pub enum Method {
     SetRgbEffectDuration(i32, Effect, i32),
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, IntoJsonValue)]
 #[serde(rename_all = "snake_case")]
 pub enum Effect {
     Sudden,
     Smooth,
-}
-
-impl From<Effect> for serde_json::Value {
-    fn from(val: Effect) -> Self {
-        match val {
-            Effect::Sudden => "sudden".to_string().into(),
-            Effect::Smooth => "smooth".to_string().into(),
-        }
-    }
 }
