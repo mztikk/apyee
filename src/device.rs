@@ -9,11 +9,7 @@ use std::{
 use thiserror::Error;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::{io, sync::RwLock};
-use tokio::{
-    io::AsyncWriteExt,
-    net::TcpStream,
-    sync::{Mutex, Notify},
-};
+use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
 
 pub const DEFAULT_PORT: u16 = 55443;
 
@@ -69,6 +65,12 @@ impl Responses {
 
     async fn wait(&self) {
         self.notify.notified().await;
+    }
+
+    async fn wait_for_id(&self, id: usize) {
+        while self.responses.get(&id).is_none() {
+            self.notify.notified().await;
+        }
     }
 }
 
@@ -166,14 +168,8 @@ impl Device {
         self.tcp_writer.write_all(json.as_bytes()).await?;
 
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
-            // check if we already have a response for this command
-            if let Some(response) = self.responses.write().await.consume(command.id) {
-                return response;
-            }
-
-            // otherwise wait for a new response
             loop {
-                self.responses.read().await.wait().await;
+                self.responses.read().await.wait_for_id(command.id).await;
 
                 if let Some(response) = self.responses.write().await.consume(command.id) {
                     return response;
