@@ -168,7 +168,7 @@ impl Device {
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
             // check if we already have a response for this command
             if let Some(response) = self.responses.write().await.consume(command.id) {
-                return Some(response);
+                return response;
             }
 
             // otherwise wait for a new response
@@ -176,13 +176,13 @@ impl Device {
                 self.responses.read().await.wait().await;
 
                 if let Some(response) = self.responses.write().await.consume(command.id) {
-                    return Some(response);
+                    return response;
                 }
             }
         })
         .await?;
 
-        Ok(unsafe { result.unwrap_unchecked() })
+        Ok(result)
     }
 
     async fn listen_responses(
