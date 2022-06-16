@@ -7,8 +7,8 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 use thiserror::Error;
-use tokio::io;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::{io, sync::RwLock};
 use tokio::{
     io::AsyncWriteExt,
     net::TcpStream,
@@ -75,7 +75,7 @@ impl Responses {
 pub struct Device {
     pub ip: String,
     pub port: u16,
-    responses: Arc<Mutex<Responses>>,
+    responses: Arc<RwLock<Responses>>,
     tcp_writer: OwnedWriteHalf,
     command_id: UniqueCommandId,
 }
@@ -86,7 +86,7 @@ impl Device {
             .await?
             .into_split();
 
-        let responses = Arc::new(Mutex::new(Responses::new()));
+        let responses = Arc::new(RwLock::new(Responses::new()));
         let responses_clone = Arc::clone(&responses);
 
         let device = Self {
@@ -166,18 +166,16 @@ impl Device {
         self.tcp_writer.write_all(json.as_bytes()).await?;
 
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
-            let mut responses = self.responses.lock().await;
-
             // check if we already have a response for this command
-            if let Some(response) = responses.consume(command.id) {
+            if let Some(response) = self.responses.write().await.consume(command.id) {
                 return Some(response);
             }
 
             // otherwise wait for a new response
             loop {
-                responses.wait().await;
+                self.responses.read().await.wait().await;
 
-                if let Some(response) = responses.consume(command.id) {
+                if let Some(response) = self.responses.write().await.consume(command.id) {
                     return Some(response);
                 }
             }
@@ -189,7 +187,7 @@ impl Device {
 
     async fn listen_responses(
         reader: OwnedReadHalf,
-        responses: Arc<Mutex<Responses>>,
+        responses: Arc<RwLock<Responses>>,
     ) -> Result<(), DeviceError> {
         let mut buffer = [0u8; 1024];
         loop {
@@ -206,7 +204,7 @@ impl Device {
                     let entries = data.split("\r\n");
                     for entry in entries {
                         let response: CommandResponse = serde_json::from_str(entry)?;
-                        responses.lock().await.add(response.id, response);
+                        responses.write().await.add(response.id, response);
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -221,7 +219,7 @@ impl Device {
 
     async fn listen_responses_console_error(
         reader: OwnedReadHalf,
-        responses: Arc<Mutex<Responses>>,
+        responses: Arc<RwLock<Responses>>,
     ) {
         match Self::listen_responses(reader, responses).await {
             Ok(_) => (),
