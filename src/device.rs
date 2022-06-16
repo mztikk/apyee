@@ -203,8 +203,11 @@ impl Device {
                 Ok(n) => {
                     // parse the json
                     let data = std::str::from_utf8(&buffer[..n])?;
-                    let response: CommandResponse = serde_json::from_str(data)?;
-                    responses.lock().await.add(response.id, response);
+                    let entries = data.split("\r\n");
+                    for entry in entries {
+                        let response: CommandResponse = serde_json::from_str(entry)?;
+                        responses.lock().await.add(response.id, response);
+                    }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     continue;
