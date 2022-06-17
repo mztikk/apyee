@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-#![deny(missing_doc_code_examples)]
+#![deny(rustdoc::missing_doc_code_examples)]
 
 //! Yeelight API
 

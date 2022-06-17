@@ -113,10 +113,12 @@ impl Device {
     /// * `DeviceError::Io` - If the connection fails.
     ///
     /// # Examples
-    /// ```
-    /// use yeelight::Device;
+    /// ```no_run
+    /// use apyee::device::Device;
     /// use std::net::IpAddr;
-    /// let device = Device::new_with_port("127.0.0.1".parse()?, 55443).await?;
+    /// async {
+    ///     let device = Device::new_with_port("127.0.0.1".parse().unwrap(), 55443).await.unwrap();
+    /// };
     /// ```
     pub async fn new_with_port(ip: IpAddr, port: u16) -> DeviceResult {
         let (read, write) = TcpStream::connect(SocketAddr::new(ip, port))
@@ -153,10 +155,12 @@ impl Device {
     /// * `DeviceError::Io` - If the connection fails.
     ///
     /// # Examples
-    /// ```
-    /// use yeelight::Device;
+    /// ```no_run
+    /// use apyee::device::Device;
     /// use std::net::IpAddr;
-    /// let device = Device::new("127.0.0.1".parse()?).await?;
+    /// async {
+    ///     let device = Device::new("127.0.0.1".parse().unwrap()).await.unwrap();
+    /// };
     /// ```
     pub async fn new(ip: IpAddr) -> DeviceResult {
         Self::new_with_port(ip, DEFAULT_PORT).await
