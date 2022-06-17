@@ -63,19 +63,19 @@ pub enum Method {
 
     /// [`Method::SetRgb`]
     BgSetRgb(i32),
-    /// [`Method::SetRgb(i32, Effect)`]
+    /// [`Method::SetRgbEffect`]
     #[serde(rename = "bg_set_rgb")]
     BgSetRgbEffect(i32, Effect),
-    /// [`Method::SetRgb(i32, Effect, i32)`]
+    /// [`Method::SetRgbEffectDuration`]
     #[serde(rename = "bg_set_rgb")]
     BgSetRgbEffectDuration(i32, Effect, i32),
 
     /// [`Method::SetHsv`]
     BgSetHsv(i32, i32),
-    /// [`Method::SetHsv(i32, i32, Effect)`]
+    /// [`Method::SetHsvEffect`]
     #[serde(rename = "bg_set_hsv")]
     BgSetHsvEffect(i32, i32, Effect),
-    /// [`Method::SetHsv(i32, i32, Effect, i32)`]
+    /// [`Method::SetHsvEffectDuration`]
     #[serde(rename = "bg_set_hsv")]
     BgSetHsvEffectDuration(i32, i32, Effect, i32),
 
@@ -84,19 +84,19 @@ pub enum Method {
 
     /// [`Method::SetPower`]
     BgSetPower(bool),
-    /// [`Method::SetPower(bool, Effect)`]
+    /// [`Method::SetPowerEffect`]
     #[serde(rename = "bg_set_power")]
     BgSetPowerEffect(bool, Effect),
-    /// [`Method::SetPower(bool, Effect, i32)`]
+    /// [`Method::SetPowerEffectDuration`]
     #[serde(rename = "bg_set_power")]
     BgSetPowerEffectDuration(bool, Effect, i32),
 
     /// [`Method::SetRgb`]
     BgSetBright(i32),
-    /// [`Method::SetRgb(i32, Effect)`]
+    /// [`Method::SetRgbEffect`]
     #[serde(rename = "bg_set_bright")]
     BgSetBrightEffect(i32, Effect),
-    /// [`Method::SetRgb(i32, Effect, i32)`]
+    /// [`Method::SetRgbEffectDuration`]
     #[serde(rename = "bg_set_bright")]
     BgSetBrightEffectDuration(i32, Effect, i32),
 
@@ -114,10 +114,10 @@ pub enum Method {
 
     /// [`Method::SetCtAbx`]
     BgSetCtAbx(i32),
-    /// [`Method::SetCtAbx(i32, Effect)`]
+    /// [`Method::SetCtAbxEffect`]
     #[serde(rename = "bg_set_ct_abx")]
     BgSetCtAbxEffect(i32, Effect),
-    /// [`Method::SetCtAbx(i32, Effect, i32)`]
+    /// [`Method::SetCtAbxEffectDuration`]
     #[serde(rename = "bg_set_ct_abx")]
     BgSetCtAbxEffectDuration(i32, Effect, i32),
 }
