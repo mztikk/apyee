@@ -8,9 +8,12 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 use thiserror::Error;
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::{io, sync::RwLock};
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
+use tokio::{
+    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
+    task::JoinHandle,
+};
 
 pub const DEFAULT_PORT: u16 = 55443;
 
@@ -76,9 +79,12 @@ impl Responses {
 }
 
 pub struct Device {
+    pub ip: IpAddr,
+    pub port: u16,
     responses: Arc<RwLock<Responses>>,
     tcp_writer: OwnedWriteHalf,
     command_id: UniqueCommandId,
+    listener_handle: JoinHandle<()>,
 }
 
 type ExecutionResult = Result<CommandResponse, DeviceError>;
@@ -94,12 +100,16 @@ impl Device {
         let responses_clone = Arc::clone(&responses);
 
         let device = Self {
+            ip,
+            port,
             tcp_writer: write,
             responses,
             command_id: UniqueCommandId::new(),
+            listener_handle: tokio::spawn(Self::listen_responses_console_error(
+                read,
+                responses_clone,
+            )),
         };
-
-        tokio::spawn(Self::listen_responses_console_error(read, responses_clone));
 
         Ok(device)
     }
