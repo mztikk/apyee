@@ -8,7 +8,7 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 use thiserror::Error;
-use tokio::{io, sync::RwLock};
+use tokio::{io, sync::Mutex};
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
 use tokio::{
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
@@ -53,34 +53,21 @@ impl UniqueCommandId {
 
 struct Responses {
     responses: HashMap<usize, CommandResponse>,
-    notify: Notify,
 }
 
 impl Responses {
     fn new() -> Self {
         Self {
             responses: HashMap::new(),
-            notify: Notify::new(),
         }
     }
 
     fn add(&mut self, response: CommandResponse) {
-        self.notify.notify_one();
         self.responses.insert(response.id, response);
     }
 
     fn consume(&mut self, id: usize) -> Option<CommandResponse> {
         self.responses.remove(&id)
-    }
-
-    async fn wait(&self) {
-        self.notify.notified().await;
-    }
-
-    async fn wait_for_id(&self, id: usize) {
-        while self.responses.get(&id).is_none() {
-            self.notify.notified().await;
-        }
     }
 }
 
@@ -90,10 +77,11 @@ pub struct Device {
     pub ip: IpAddr,
     /// The port of the device.
     pub port: u16,
-    responses: Arc<RwLock<Responses>>,
+    responses: Arc<Mutex<Responses>>,
     tcp_writer: OwnedWriteHalf,
     command_id: UniqueCommandId,
     listener_handle: JoinHandle<()>,
+    notify: Arc<Notify>,
 }
 
 type ExecutionResult = Result<CommandResponse, DeviceError>;
@@ -125,8 +113,11 @@ impl Device {
             .await?
             .into_split();
 
-        let responses = Arc::new(RwLock::new(Responses::new()));
+        let responses = Arc::new(Mutex::new(Responses::new()));
         let responses_clone = Arc::clone(&responses);
+
+        let notify = Arc::new(Notify::new());
+        let notify_clone = Arc::clone(&notify);
 
         let device = Self {
             ip,
@@ -137,7 +128,9 @@ impl Device {
             listener_handle: tokio::spawn(Self::listen_responses_console_error(
                 read,
                 responses_clone,
+                notify_clone,
             )),
+            notify,
         };
 
         Ok(device)
@@ -231,9 +224,9 @@ impl Device {
 
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
             loop {
-                self.responses.read().await.wait_for_id(command.id).await;
+                self.notify.notified().await;
 
-                if let Some(response) = self.responses.write().await.consume(command.id) {
+                if let Some(response) = self.responses.lock().await.consume(command.id) {
                     return response;
                 }
             }
@@ -245,7 +238,8 @@ impl Device {
 
     async fn listen_responses(
         reader: OwnedReadHalf,
-        responses: Arc<RwLock<Responses>>,
+        responses: Arc<Mutex<Responses>>,
+        notify: Arc<Notify>,
     ) -> Result<(), DeviceError> {
         let mut buffer = [0u8; 8192];
         loop {
@@ -257,10 +251,11 @@ impl Device {
                 Ok(n) => {
                     // parse the json
                     let data = std::str::from_utf8(&buffer[..n])?;
-                    let entries = data.split("\r\n");
+                    let entries = data.split_terminator("\r\n");
                     for entry in entries {
                         let response: CommandResponse = serde_json::from_str(entry)?;
-                        responses.write().await.add(response);
+                        responses.lock().await.add(response);
+                        notify.notify_one();
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -275,9 +270,10 @@ impl Device {
 
     async fn listen_responses_console_error(
         reader: OwnedReadHalf,
-        responses: Arc<RwLock<Responses>>,
+        responses: Arc<Mutex<Responses>>,
+        notify: Arc<Notify>,
     ) {
-        match Self::listen_responses(reader, responses).await {
+        match Self::listen_responses(reader, responses, notify).await {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("{}", e);
