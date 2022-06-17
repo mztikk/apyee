@@ -1,6 +1,6 @@
 [package]
 name = "apyee"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 repository = "https://github.com/mztikk/apyee"
 authors = ["Nils Feierabend <mztikk@outlook.de>"]
