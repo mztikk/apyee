@@ -1,6 +1,6 @@
 [package]
 name = "apyee"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/mztikk/apyee"
 authors = ["Nils Feierabend <mztikk@outlook.de>"]
@@ -10,7 +10,7 @@ description = "yeelight api"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-get_params_derive = "0.3.1"
+get_params_derive = "0.4.0"
 quote = "1.0.18"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"

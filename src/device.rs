@@ -15,17 +15,23 @@ use tokio::{
     task::JoinHandle,
 };
 
+/// Default Port of Yeelight Bulbs
 pub const DEFAULT_PORT: u16 = 55443;
 
+/// Errors that can occur when interacting with a Yeelight Bulb
 #[derive(Error, Debug)]
 pub enum DeviceError {
+    /// Error when connecting or sending packets to the Yeelight Bulb
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// Error when parsing a packet from the Yeelight Bulb
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// Error when a response times out
     #[error(transparent)]
     Timeout(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
+    /// Error when a response contains invalid utf8
     Utf8(#[from] std::str::Utf8Error),
 }
 
@@ -78,8 +84,11 @@ impl Responses {
     }
 }
 
+/// A Yeelight device.
 pub struct Device {
+    /// The IP address of the device.
     pub ip: IpAddr,
+    /// The port of the device.
     pub port: u16,
     responses: Arc<RwLock<Responses>>,
     tcp_writer: OwnedWriteHalf,
@@ -91,6 +100,24 @@ type ExecutionResult = Result<CommandResponse, DeviceError>;
 type DeviceResult = Result<Device, DeviceError>;
 
 impl Device {
+    /// Creates a new device with ip and port.
+    /// The device will connect to the device at the given IP address and port.
+    /// If the connection fails, the function will return an error.
+    /// The device will also start listening for responses from the device.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the device.
+    /// * `port` - The port of the device.
+    ///
+    /// # Errors
+    /// * `DeviceError::Io` - If the connection fails.
+    ///
+    /// # Examples
+    /// ```
+    /// use yeelight::Device;
+    /// use std::net::IpAddr;
+    /// let device = Device::new_with_port("127.0.0.1".parse()?, 55443).await?;
+    /// ```
     pub async fn new_with_port(ip: IpAddr, port: u16) -> DeviceResult {
         let (read, write) = TcpStream::connect(SocketAddr::new(ip, port))
             .await?
@@ -114,42 +141,85 @@ impl Device {
         Ok(device)
     }
 
+    /// Creates a new device with ip and default port.
+    /// The device will connect to the device at the given IP address and default port.
+    /// If the connection fails, the function will return an error.
+    /// The device will also start listening for responses from the device.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the device.
+    ///
+    /// # Errors
+    /// * `DeviceError::Io` - If the connection fails.
+    ///
+    /// # Examples
+    /// ```
+    /// use yeelight::Device;
+    /// use std::net::IpAddr;
+    /// let device = Device::new("127.0.0.1".parse()?).await?;
+    /// ```
     pub async fn new(ip: IpAddr) -> DeviceResult {
         Self::new_with_port(ip, DEFAULT_PORT).await
     }
 
+    /// Converts u8 RGB values into the i32 RGB format used by the Yeelight device.\
+    /// The i32 RGB format is a 24-bit integer with the red, green, and blue values packed into a single integer.
+    ///
+    /// # Arguments
+    /// * `r` - The red value.
+    /// * `g` - The green value.
+    /// * `b` - The blue value.
     pub const fn get_rgb_color(r: u8, g: u8, b: u8) -> i32 {
         (r as i32) << 16 | (g as i32) << 8 | (b as i32)
     }
 
+    /// Sets the color of the device, given as separate u8 RGB values.
+    ///
+    /// # Arguments
+    /// * `r` - The red value.
+    /// * `g` - The green value.
+    /// * `b` - The blue value.
     pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
         self.execute_method(Method::SetRgb(Self::get_rgb_color(r, g, b)))
             .await
     }
 
+    /// Sets the background color of the device, given as separate u8 RGB values.
+    ///
+    /// # Arguments
+    /// * `r` - The red value.
+    /// * `g` - The green value.
+    /// * `b` - The blue value.
     pub async fn set_bg_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
         self.execute_method(Method::BgSetRgb(Self::get_rgb_color(r, g, b)))
             .await
     }
 
+    /// Toggles the devices power state.
+    /// If the device is on, it will be turned off.
+    /// If the device is off, it will be turned on.
     pub async fn toggle(&mut self) -> ExecutionResult {
         self.execute_method(Method::Toggle).await
     }
 
+    /// Sets the power state of the device to on.
     pub async fn power_on(&mut self) -> ExecutionResult {
         self.execute_method(Method::SetPower(true)).await
     }
 
+    /// Sets the power state of the device to off.
     pub async fn power_off(&mut self) -> ExecutionResult {
         self.execute_method(Method::SetPower(false)).await
     }
 
+    /// Executes a given [`Method`] on the device by creating a new command with a unique id.
     pub async fn execute_method(&mut self, method: Method) -> ExecutionResult {
         let command = Command::new(self.command_id.next(), method);
 
         self.execute_command(command).await
     }
 
+    /// Executes a given [`Command`] on the device.
     pub async fn execute_command(&mut self, command: Command) -> ExecutionResult {
         // terminate every message with \r\n"
         let json = format!("{}\r\n", serde_json::to_string(&command)?);

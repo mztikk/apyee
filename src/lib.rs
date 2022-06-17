@@ -1,6 +1,15 @@
+#![deny(missing_docs)]
+#![deny(missing_doc_code_examples)]
+
+//! Yeelight API
+
+/// Commands and their responses which are sent and received from the [`crate::device::Device`].
 pub mod command;
+/// The [`crate::device::Device`] itself, used to interact with the Yeelight device.
 pub mod device;
+/// The [`crate::method::Method`]s which are called on the Yeelight device.
 pub mod method;
+/// The [`crate::property::Property`]s which are queried from the Yeelight device.
 pub mod property;
 
 #[cfg(test)]
