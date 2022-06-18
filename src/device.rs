@@ -71,10 +71,8 @@ impl Responses {
 
 /// A Yeelight device.
 pub struct Device {
-    /// The IP address of the device.
-    pub ip: IpAddr,
-    /// The port of the device.
-    pub port: u16,
+    /// The Address of the device.
+    pub address: SocketAddr,
     responses: Arc<Mutex<Responses>>,
     tcp_stream: Arc<Mutex<TcpStream>>,
     command_id: UniqueCommandId,
@@ -105,8 +103,9 @@ impl Device {
     ///     let device = Device::new_with_port("127.0.0.1".parse().unwrap(), 55443).await.unwrap();
     /// };
     /// ```
-    pub async fn new_with_port(ip: IpAddr, port: u16) -> DeviceResult {
-        let stream = TcpStream::connect(SocketAddr::new(ip, port)).await?;
+    pub async fn new_with_port(ip: String, port: u16) -> DeviceResult {
+        let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
+        let addr = stream.peer_addr()?;
         let stream = Arc::new(Mutex::new(stream));
         let stream_clone = Arc::clone(&stream);
 
@@ -123,8 +122,7 @@ impl Device {
         ));
 
         let device = Self {
-            ip,
-            port,
+            address: addr,
             tcp_stream: stream,
             responses,
             command_id: UniqueCommandId::new(),
@@ -153,7 +151,7 @@ impl Device {
     ///     let device = Device::new("127.0.0.1".parse().unwrap()).await.unwrap();
     /// };
     /// ```
-    pub async fn new(ip: IpAddr) -> DeviceResult {
+    pub async fn new(ip: String) -> DeviceResult {
         Self::new_with_port(ip, DEFAULT_PORT).await
     }
 
