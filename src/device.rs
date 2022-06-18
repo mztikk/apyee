@@ -222,18 +222,19 @@ impl Device {
         let json = format!("{}\r\n", serde_json::to_string(&command)?);
         self.tcp_writer.write_all(json.as_bytes()).await?;
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(2), async move {
+        let result = tokio::time::timeout(std::time::Duration::from_secs(4), async move {
             loop {
-                self.notify.notified().await;
+                tokio::time::timeout(std::time::Duration::from_secs(1), self.notify.notified())
+                    .await?;
 
                 if let Some(response) = self.responses.lock().await.consume(command.id) {
-                    return response;
+                    return Ok(response);
                 }
             }
         })
         .await?;
 
-        Ok(result)
+        result
     }
 
     async fn listen_responses(
@@ -248,6 +249,10 @@ impl Device {
 
             // read the data
             match reader.try_read(&mut buffer) {
+                Ok(0) => {
+                    // if the connection is closed, return
+                    return Ok(());
+                }
                 Ok(n) => {
                     // parse the json
                     let data = std::str::from_utf8(&buffer[..n])?;
