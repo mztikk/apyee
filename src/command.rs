@@ -16,6 +16,7 @@ where
 /// [`Command`]s are created using the [`Command::new`] function.
 #[derive(Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
+// TODO: implement custom deserializer to get the method enum values from the params
 pub struct Command {
     /// The unique ID of the command.
     pub id: usize,

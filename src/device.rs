@@ -177,7 +177,7 @@ impl Device {
     /// * `g` - The green value.
     /// * `b` - The blue value.
     pub async fn set_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
-        self.execute_method(Method::SetRgb(Self::get_rgb_color(r, g, b)))
+        self.execute_method(Method::SetRgb(Self::get_rgb_color(r, g, b), None, None))
             .await
     }
 
@@ -188,7 +188,7 @@ impl Device {
     /// * `g` - The green value.
     /// * `b` - The blue value.
     pub async fn set_bg_rgb(&mut self, r: u8, g: u8, b: u8) -> ExecutionResult {
-        self.execute_method(Method::BgSetRgb(Self::get_rgb_color(r, g, b)))
+        self.execute_method(Method::BgSetRgb(Self::get_rgb_color(r, g, b), None, None))
             .await
     }
 
@@ -201,12 +201,14 @@ impl Device {
 
     /// Sets the power state of the device to on.
     pub async fn power_on(&mut self) -> ExecutionResult {
-        self.execute_method(Method::SetPower(true)).await
+        self.execute_method(Method::SetPower(true, None, None))
+            .await
     }
 
     /// Sets the power state of the device to off.
     pub async fn power_off(&mut self) -> ExecutionResult {
-        self.execute_method(Method::SetPower(false)).await
+        self.execute_method(Method::SetPower(false, None, None))
+            .await
     }
 
     /// Executes a given [`Method`] on the device by creating a new command with a unique id.

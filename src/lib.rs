@@ -24,7 +24,7 @@ mod tests {
     #[test]
     fn it_works() {
         let command =
-            command::Command::new(0, Method::SetPowerEffectDuration(true, Effect::Smooth, 500));
+            command::Command::new(0, Method::SetPower(true, Some(Effect::Smooth), Some(500)));
         let json = serde_json::to_string(&command).unwrap();
         println!("{}", json);
     }
@@ -33,7 +33,11 @@ mod tests {
     fn command_serialization() {
         let command = command::Command::new(
             0,
-            Method::SetRgbEffectDuration(Device::get_rgb_color(255, 0, 0), Effect::Smooth, 500),
+            Method::SetRgb(
+                Device::get_rgb_color(255, 0, 0),
+                Some(Effect::Smooth),
+                Some(500),
+            ),
         );
         let json = serde_json::to_string(&command).unwrap();
         assert_eq!(
