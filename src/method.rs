@@ -1,9 +1,10 @@
+use crate::command::RawCommand;
 use crate::property::Property;
-use get_params_derive::{GetParams, IntoJsonValue};
+use get_params_derive::{FromRawCommand, GetParams, IntoJsonValue};
 use serde::{Deserialize, Serialize};
 
 /// Methods to be called on a device.
-#[derive(Serialize, Clone, GetParams, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, GetParams, PartialEq, Eq, Debug, FromRawCommand)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
     /// Get the specified property value.

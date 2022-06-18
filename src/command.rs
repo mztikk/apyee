@@ -1,12 +1,11 @@
-use std::{collections::HashMap, iter::Map};
-
 use crate::{method::Method, property::Property};
 use serde::{Deserialize, Serialize, Serializer};
+use std::collections::HashMap;
 
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
-struct RawCommand {
-    pub id: usize,
+pub(crate) struct RawCommand {
+    pub id: i32,
     pub method: String,
     pub params: Vec<serde_json::Value>,
 }
@@ -24,7 +23,7 @@ where
 /// The command is serialized to JSON and sent to the device.
 ///
 /// [`Command`]s are created using the [`Command::new`] function.
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case", from = "RawCommand")]
 // TODO: implement custom deserializer to get the method enum values from the params
 pub struct Command {
@@ -35,6 +34,16 @@ pub struct Command {
     pub method: Method,
     /// The parameters to be passed for the method.
     pub params: Vec<serde_json::Value>,
+}
+
+impl From<RawCommand> for Command {
+    fn from(raw: RawCommand) -> Self {
+        Command {
+            id: raw.id,
+            method: Method::from(&raw),
+            params: raw.params,
+        }
+    }
 }
 
 impl Command {
