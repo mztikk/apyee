@@ -5,12 +5,16 @@ use crate::{
 use rand::Rng;
 use std::{
     collections::HashMap,
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     sync::{atomic::AtomicI32, Arc},
 };
 use thiserror::Error;
-use tokio::{io, sync::Mutex};
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
+use tokio::io;
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpStream,
+    sync::{Mutex, Notify},
+};
 
 /// Default Port of Yeelight Bulbs
 pub const DEFAULT_PORT: u16 = 55443;
@@ -258,9 +262,6 @@ impl Device {
                     let data = std::str::from_utf8(&buffer[..n])?;
                     let entries = data.split_terminator("\r\n");
                     for entry in entries {
-                        // let response: CommandResponse = serde_json::from_str(entry)?;
-                        // responses.lock().await.add(response);
-                        // notify.notify_one();
                         if let Ok(response) = serde_json::from_str::<CommandResponse>(entry) {
                             responses.lock().await.add(response);
                             notify.notify_one();
