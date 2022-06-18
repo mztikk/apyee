@@ -14,7 +14,7 @@ where
 /// The command is serialized to JSON and sent to the device.
 ///
 /// [`Command`]s are created using the [`Command::new`] function.
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct Command {
     /// The unique ID of the command.

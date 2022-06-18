@@ -3,7 +3,7 @@ use get_params_derive::{GetParams, IntoJsonValue};
 use serde::{Deserialize, Serialize};
 
 /// Methods to be called on a device.
-#[derive(Serialize, Deserialize, Clone, GetParams, PartialEq, Eq, Debug)]
+#[derive(Serialize, Clone, GetParams, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
     /// Get the specified property value.
