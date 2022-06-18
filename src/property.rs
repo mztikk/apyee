@@ -2,7 +2,7 @@ use get_params_derive::IntoJsonValue;
 use serde::{Deserialize, Serialize};
 
 /// Properties of a device.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, IntoJsonValue)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, IntoJsonValue, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Property {
     /// The power state of the device.

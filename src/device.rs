@@ -1,5 +1,5 @@
 use crate::{
-    command::{Command, CommandResponse},
+    command::{Command, CommandResponse, NotificationResult},
     method::Method,
 };
 use rand::Rng;
@@ -260,9 +260,17 @@ impl Device {
                     let data = std::str::from_utf8(&buffer[..n])?;
                     let entries = data.split_terminator("\r\n");
                     for entry in entries {
-                        let response: CommandResponse = serde_json::from_str(entry)?;
-                        responses.lock().await.add(response);
-                        notify.notify_one();
+                        // let response: CommandResponse = serde_json::from_str(entry)?;
+                        // responses.lock().await.add(response);
+                        // notify.notify_one();
+                        if let Ok(response) = serde_json::from_str::<CommandResponse>(entry) {
+                            responses.lock().await.add(response);
+                            notify.notify_one();
+                        };
+
+                        if let Ok(response) = serde_json::from_str::<NotificationResult>(entry) {
+                            // TODO: Save properies somewhere
+                        }
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {

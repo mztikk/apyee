@@ -1,4 +1,6 @@
-use crate::method::Method;
+use std::{collections::HashMap, iter::Map};
+
+use crate::{method::Method, property::Property};
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Serialize, PartialEq, Eq, Debug)]
@@ -76,4 +78,13 @@ pub struct CommandResponseError {
     pub code: i32,
     /// The error description.
     pub message: String,
+}
+
+/// Notification from a device, containing a method and changed properties.
+#[derive(Serialize, Deserialize)]
+pub struct NotificationResult {
+    /// The method of the notification.
+    pub method: String,
+    /// The properties of the notification.
+    pub params: HashMap<Property, serde_json::Value>,
 }
