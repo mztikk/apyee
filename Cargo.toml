@@ -1,6 +1,6 @@
 [package]
 name = "apyee"
-version = "0.3.0"
+version = "0.3.5"
 edition = "2021"
 repository = "https://github.com/mztikk/apyee"
 authors = ["Nils Feierabend <mztikk@outlook.de>"]
@@ -12,6 +12,7 @@ description = "yeelight api"
 [dependencies]
 get_params_derive = { version = "0.5.0"}
 quote = "1.0.18"
+rand = "0.8.5"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 serde_variant = "0.1.1"

@@ -1,6 +1,14 @@
 use crate::method::Method;
 use serde::{Deserialize, Serialize, Serializer};
 
+#[derive(Serialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+struct RawCommand {
+    pub id: usize,
+    pub method: String,
+    pub params: Vec<serde_json::Value>,
+}
+
 fn variant_name_only<S>(method: &Method, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -15,11 +23,11 @@ where
 ///
 /// [`Command`]s are created using the [`Command::new`] function.
 #[derive(Serialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", from = "RawCommand")]
 // TODO: implement custom deserializer to get the method enum values from the params
 pub struct Command {
     /// The unique ID of the command.
-    pub id: usize,
+    pub id: i32,
     /// The method to be called on the device.
     #[serde(serialize_with = "variant_name_only")]
     pub method: Method,
@@ -29,7 +37,7 @@ pub struct Command {
 
 impl Command {
     /// Creates a new command with a unique ID and a [`Method`].
-    pub fn new(id: usize, method: Method) -> Self {
+    pub fn new(id: i32, method: Method) -> Self {
         Self {
             id,
             params: method.get_params(),
@@ -42,7 +50,7 @@ impl Command {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct CommandResponse {
     /// The unique, echoed ID of the command.
-    pub id: usize,
+    pub id: i32,
     /// The result of the command.
     pub result: Vec<CommandResult>,
     /// The error of the command, if any.
@@ -55,6 +63,10 @@ pub struct CommandResponse {
 pub enum CommandResult {
     /// The command was successful ("ok").
     Ok,
+    /// State is off
+    Off,
+    /// State is on
+    On,
 }
 
 /// The error of a [`Command`], containing a error code and a description.

@@ -2,17 +2,17 @@ use crate::{
     command::{Command, CommandResponse},
     method::Method,
 };
+use rand::Rng;
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{atomic::AtomicI32, Arc},
 };
 use thiserror::Error;
-use tokio::{io, sync::Mutex};
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
 use tokio::{
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
-    task::JoinHandle,
+    io::{self},
+    sync::Mutex,
 };
 
 /// Default Port of Yeelight Bulbs
@@ -36,23 +36,24 @@ pub enum DeviceError {
 }
 
 struct UniqueCommandId {
-    id: AtomicUsize,
+    id: AtomicI32,
 }
 
 impl UniqueCommandId {
     fn new() -> Self {
+        let rand = rand::thread_rng().gen_range(15..1500);
         Self {
-            id: AtomicUsize::new(0),
+            id: AtomicI32::new(rand),
         }
     }
 
-    fn next(&self) -> usize {
+    fn next(&self) -> i32 {
         self.id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }
 
 struct Responses {
-    responses: HashMap<usize, CommandResponse>,
+    responses: HashMap<i32, CommandResponse>,
 }
 
 impl Responses {
@@ -66,7 +67,7 @@ impl Responses {
         self.responses.insert(response.id, response);
     }
 
-    fn consume(&mut self, id: usize) -> Option<CommandResponse> {
+    fn consume(&mut self, id: i32) -> Option<CommandResponse> {
         self.responses.remove(&id)
     }
 }
@@ -78,9 +79,8 @@ pub struct Device {
     /// The port of the device.
     pub port: u16,
     responses: Arc<Mutex<Responses>>,
-    tcp_writer: OwnedWriteHalf,
+    tcp_stream: Arc<Mutex<TcpStream>>,
     command_id: UniqueCommandId,
-    listener_handle: JoinHandle<()>,
     notify: Arc<Notify>,
 }
 
@@ -109,9 +109,9 @@ impl Device {
     /// };
     /// ```
     pub async fn new_with_port(ip: IpAddr, port: u16) -> DeviceResult {
-        let (read, write) = TcpStream::connect(SocketAddr::new(ip, port))
-            .await?
-            .into_split();
+        let stream = TcpStream::connect(SocketAddr::new(ip, port)).await?;
+        let stream = Arc::new(Mutex::new(stream));
+        let stream_clone = Arc::clone(&stream);
 
         let responses = Arc::new(Mutex::new(Responses::new()));
         let responses_clone = Arc::clone(&responses);
@@ -119,17 +119,18 @@ impl Device {
         let notify = Arc::new(Notify::new());
         let notify_clone = Arc::clone(&notify);
 
+        tokio::spawn(Self::listen_responses_console_error(
+            stream_clone,
+            responses_clone,
+            notify_clone,
+        ));
+
         let device = Self {
             ip,
             port,
-            tcp_writer: write,
+            tcp_stream: stream,
             responses,
             command_id: UniqueCommandId::new(),
-            listener_handle: tokio::spawn(Self::listen_responses_console_error(
-                read,
-                responses_clone,
-                notify_clone,
-            )),
             notify,
         };
 
@@ -221,12 +222,18 @@ impl Device {
     /// Executes a given [`Command`] on the device.
     pub async fn execute_command(&mut self, command: Command) -> ExecutionResult {
         // terminate every message with \r\n"
-        let json = format!("{}\r\n", serde_json::to_string(&command)?);
-        self.tcp_writer.write_all(json.as_bytes()).await?;
+        let json = serde_json::to_string(&command)?;
+        let json_command = format!("{}\r\n", json);
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(4), async move {
+        self.tcp_stream
+            .lock()
+            .await
+            .write_all(json_command.as_bytes())
+            .await?;
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
-                tokio::time::timeout(std::time::Duration::from_secs(1), self.notify.notified())
+                tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified())
                     .await?;
 
                 if let Some(response) = self.responses.lock().await.consume(command.id) {
@@ -240,17 +247,13 @@ impl Device {
     }
 
     async fn listen_responses(
-        reader: OwnedReadHalf,
+        tcp_stream: Arc<Mutex<TcpStream>>,
         responses: Arc<Mutex<Responses>>,
         notify: Arc<Notify>,
     ) -> Result<(), DeviceError> {
-        let mut buffer = [0u8; 8192];
         loop {
-            // wait for data to become available and readable
-            reader.readable().await?;
-
-            // read the data
-            match reader.try_read(&mut buffer) {
+            let mut buffer = [0u8; 8192];
+            match tcp_stream.lock().await.try_read(&mut buffer) {
                 Ok(0) => {
                     // if the connection is closed, return
                     return Ok(());
@@ -266,6 +269,7 @@ impl Device {
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
                 Err(e) => {
@@ -276,11 +280,11 @@ impl Device {
     }
 
     async fn listen_responses_console_error(
-        reader: OwnedReadHalf,
+        tcp_stream: Arc<Mutex<TcpStream>>,
         responses: Arc<Mutex<Responses>>,
         notify: Arc<Notify>,
     ) {
-        match Self::listen_responses(reader, responses, notify).await {
+        match Self::listen_responses(tcp_stream, responses, notify).await {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("{}", e);
