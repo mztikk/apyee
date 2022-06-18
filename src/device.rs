@@ -9,11 +9,8 @@ use std::{
     sync::{atomic::AtomicI32, Arc},
 };
 use thiserror::Error;
+use tokio::{io, sync::Mutex};
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
-use tokio::{
-    io::{self},
-    sync::Mutex,
-};
 
 /// Default Port of Yeelight Bulbs
 pub const DEFAULT_PORT: u16 = 55443;
