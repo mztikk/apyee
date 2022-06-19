@@ -3,13 +3,13 @@
 
 //! Yeelight API
 //! This library provides a Rust API for the Yeelight device.
-//! It is based on the official Yeelight API documentation.
+//! It is based on the [official Yeelight API documentation](https://home.yeelight.de/site/templates/downloads/yeelight_inter-operation-spec.pdf).
 //!
 //! # Examples
 //! ```no_run
 //! use apyee::device::Device;
 //! use apyee::method::Method;
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create a new Device with the IP address of the device and the default port.
