@@ -6,24 +6,28 @@
 //! It is based on the official Yeelight API documentation.
 //!
 //! # Examples
-//! ```
+//! ```no_run
 //! use apyee::device::Device;
 //! use apyee::method::Method;
-//! async {
+//! 
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create a new Device with the IP address of the device and the default port.
 //!     // creating the Device will also connect to it and start listening for responses.
-//!     let mut device = Device::new("192.168.100.5").await.unwrap();
+//!     let mut device = Device::new("192.168.100.5").await?;
 //!
 //!     // Send a command through a convenience method and toggle its power state.
-//!     device.toggle().await.unwrap();
+//!     device.toggle().await?;
 //!
 //!     // Set its RGB Color to red.
-//!     device.set_rgb(255, 0, 0).await.unwrap();
+//!     device.set_rgb(255, 0, 0).await?;
 //!
 //!     // Send any possible command to the device.
-//!     device.execute_method(Method::SetBright(50, None, None)).await.unwrap();
+//!     device.execute_method(Method::SetBright(50, None, None)).await?;
+//!
+//!     Ok(())
+//! }
 //! ```
-//! };
 
 /// Commands and their responses which are sent and received from the [`crate::device::Device`].
 pub mod command;

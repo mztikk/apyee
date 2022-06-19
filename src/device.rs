@@ -102,9 +102,15 @@ impl Device {
     /// # Examples
     /// ```no_run
     /// use apyee::device::Device;
-    /// async {
-    ///     let device = Device::new_with_port("127.0.0.1", 55443).await.unwrap();
-    /// };
+    /// 
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     // Create a new Device with the IP address and port of the device.
+    ///     // creating the Device will also connect to it and start listening for responses.
+    ///     let mut device = Device::new_with_port("192.168.100.5", 55443).await?;
+    ///
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn new_with_port(ip: &str, port: u16) -> DeviceResult {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
@@ -149,9 +155,14 @@ impl Device {
     /// # Examples
     /// ```no_run
     /// use apyee::device::Device;
-    /// async {
-    ///     let device = Device::new("127.0.0.1").await.unwrap();
-    /// };
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     // Create a new Device with the IP address of the device and the default port.
+    ///     // creating the Device will also connect to it and start listening for responses.
+    ///     let mut device = Device::new("192.168.100.5").await?;
+    ///
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn new(ip: &str) -> DeviceResult {
         Self::new_with_port(ip, DEFAULT_PORT).await
