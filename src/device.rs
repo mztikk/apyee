@@ -34,6 +34,9 @@ pub enum DeviceError {
     #[error(transparent)]
     /// Error when a response contains invalid utf8
     Utf8(#[from] std::str::Utf8Error),
+    #[error("Got no response for command")]
+    /// Got no response for command, shouldn't happen since we timeout before while waiting for the response notification
+    NoResponse,
 }
 
 struct UniqueCommandId {
@@ -102,7 +105,7 @@ impl Device {
     /// # Examples
     /// ```no_run
     /// use apyee::device::Device;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     // Create a new Device with the IP address and port of the device.
@@ -116,18 +119,13 @@ impl Device {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
         let addr = stream.peer_addr()?;
         let stream = Arc::new(Mutex::new(stream));
-        let stream_clone = Arc::clone(&stream);
-
         let responses = Arc::new(Mutex::new(Responses::new()));
-        let responses_clone = Arc::clone(&responses);
-
         let notify = Arc::new(Notify::new());
-        let notify_clone = Arc::clone(&notify);
 
         tokio::spawn(Self::listen_responses_console_error(
-            stream_clone,
-            responses_clone,
-            notify_clone,
+            Arc::clone(&stream),
+            Arc::clone(&responses),
+            Arc::clone(&notify),
         ));
 
         let device = Self {
@@ -239,19 +237,13 @@ impl Device {
             .write_all(json_command.as_bytes())
             .await?;
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-            loop {
-                tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified())
-                    .await?;
+        tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified()).await?;
 
-                if let Some(response) = self.responses.lock().await.consume(command.id) {
-                    return Ok(response);
-                }
-            }
-        })
-        .await?;
-
-        result
+        self.responses
+            .lock()
+            .await
+            .consume(command.id)
+            .ok_or(DeviceError::NoResponse)
     }
 
     async fn listen_responses(
@@ -277,7 +269,7 @@ impl Device {
                         };
 
                         if let Ok(response) = serde_json::from_str::<NotificationResult>(entry) {
-                            // TODO: Save properies somewhere
+                            // TODO: Save properties somewhere
                         }
                     }
                 }
