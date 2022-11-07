@@ -34,9 +34,6 @@ pub enum DeviceError {
     #[error(transparent)]
     /// Error when a response contains invalid utf8
     Utf8(#[from] std::str::Utf8Error),
-    #[error("Got no response for command")]
-    /// Got no response for command, shouldn't happen since we timeout before while waiting for the response notification
-    NoResponse,
 }
 
 struct UniqueCommandId {
@@ -237,13 +234,25 @@ impl Device {
             .write_all(json_command.as_bytes())
             .await?;
 
-        tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified()).await?;
+        // check if we already have a response for our current id
+        if let Some(response) = self.responses.lock().await.consume(command.id) {
+            return Ok(response);
+        }
 
-        self.responses
-            .lock()
-            .await
-            .consume(command.id)
-            .ok_or(DeviceError::NoResponse)
+        // check for multiple responses in case we get an older one with a different id
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                // wait for a new notification
+                tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified())
+                    .await?;
+
+                // and check again
+                if let Some(response) = self.responses.lock().await.consume(command.id) {
+                    return Ok(response);
+                }
+            }
+        })
+        .await?
     }
 
     async fn listen_responses(
