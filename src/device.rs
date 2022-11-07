@@ -234,22 +234,17 @@ impl Device {
             .write_all(json_command.as_bytes())
             .await?;
 
-        // check if we already have a response for our current id
-        if let Some(response) = self.responses.lock().await.consume(command.id) {
-            return Ok(response);
-        }
-
         // check for multiple responses in case we get an older one with a different id
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        tokio::time::timeout(std::time::Duration::from_secs(20), async {
             loop {
-                // wait for a new notification
-                tokio::time::timeout(std::time::Duration::from_secs(3), self.notify.notified())
-                    .await?;
-
-                // and check again
+                // check if we have a response for our current id
                 if let Some(response) = self.responses.lock().await.consume(command.id) {
                     return Ok(response);
                 }
+
+                // otherwise wait for a new notification
+                tokio::time::timeout(std::time::Duration::from_secs(5), self.notify.notified())
+                    .await?;
             }
         })
         .await?
