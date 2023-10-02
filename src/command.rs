@@ -1,6 +1,8 @@
-use crate::{method::Method, property::Property};
-use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize, Serializer};
+
+use crate::{method::Method, property::Property};
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -90,7 +92,7 @@ pub struct CommandResponseError {
 }
 
 /// Notification from a device, containing a method and changed properties.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NotificationResult {
     /// The method of the notification.
     pub method: String,

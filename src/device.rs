@@ -1,19 +1,22 @@
-use crate::{
-    command::{Command, CommandResponse, NotificationResult},
-    method::Method,
-};
-use rand::Rng;
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{atomic::AtomicI32, Arc},
 };
+
+use rand::Rng;
 use thiserror::Error;
-use tokio::io;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::task::JoinHandle;
 use tokio::{
-    io::AsyncWriteExt,
-    net::TcpStream,
-    sync::{Mutex, Notify},
+    io,
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+};
+use tokio::{io::AsyncWriteExt, net::TcpStream, sync::Notify};
+
+use crate::{
+    command::{Command, CommandResponse, NotificationResult},
+    method::Method,
 };
 
 /// Default Port of Yeelight Bulbs
@@ -34,6 +37,9 @@ pub enum DeviceError {
     #[error(transparent)]
     /// Error when a response contains invalid utf8
     Utf8(#[from] std::str::Utf8Error),
+    /// Device disconnected
+    #[error("device disconnected")]
+    Disconnected,
 }
 
 struct UniqueCommandId {
@@ -77,10 +83,11 @@ impl Responses {
 pub struct Device {
     /// The Address of the device.
     pub address: SocketAddr,
-    responses: Arc<Mutex<Responses>>,
-    tcp_stream: Arc<Mutex<TcpStream>>,
+    receiver: UnboundedReceiver<CommandResponse>,
+    tcp_stream: OwnedWriteHalf,
     command_id: UniqueCommandId,
     notify: Arc<Notify>,
+    reader_task: JoinHandle<()>,
 }
 
 type ExecutionResult = Result<CommandResponse, DeviceError>;
@@ -115,22 +122,23 @@ impl Device {
     pub async fn new_with_port(ip: &str, port: u16) -> DeviceResult {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
         let addr = stream.peer_addr()?;
-        let stream = Arc::new(Mutex::new(stream));
-        let responses = Arc::new(Mutex::new(Responses::new()));
+        let (reader, writer) = stream.into_split();
+        let (sender, receiver) = mpsc::unbounded_channel::<CommandResponse>();
         let notify = Arc::new(Notify::new());
 
-        tokio::spawn(Self::listen_responses_console_error(
-            Arc::clone(&stream),
-            Arc::clone(&responses),
+        let reader_task = tokio::spawn(Self::listen_responses_console_error(
+            reader,
+            sender,
             Arc::clone(&notify),
         ));
 
         let device = Self {
             address: addr,
-            tcp_stream: stream,
-            responses,
+            tcp_stream: writer,
+            receiver,
             command_id: UniqueCommandId::new(),
             notify,
+            reader_task,
         };
 
         Ok(device)
@@ -228,36 +236,45 @@ impl Device {
         let json = serde_json::to_string(&command)?;
         let json_command = format!("{}\r\n", json);
 
-        self.tcp_stream
-            .lock()
-            .await
-            .write_all(json_command.as_bytes())
-            .await?;
-
+        self.tcp_stream.writable().await?;
+        self.tcp_stream.write_all(json_command.as_bytes()).await?;
         // check for multiple responses in case we get an older one with a different id
-        tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        /*tokio::time::timeout(std::time::Duration::from_secs(20), async {
             loop {
                 // check if we have a response for our current id
-                if let Some(response) = self.responses.lock().await.consume(command.id) {
+                // if let Some(response) = self.responses.lock().await.consume(command.id) {
+                //     return Ok(response);
+                // }
+
+                if let Some(response) = self.receiver.recv().await {
                     return Ok(response);
                 }
 
                 // otherwise wait for a new notification
-                tokio::time::timeout(std::time::Duration::from_secs(5), self.notify.notified())
+                tokio::time::timeout(std::time::Duration::from_secs(50), self.notify.notified())
                     .await?;
             }
         })
         .await?
+        */
+
+        if let Some(response) = self.receiver.recv().await {
+            return Ok(response);
+        }
+
+        Err(DeviceError::Disconnected)
     }
 
     async fn listen_responses(
-        tcp_stream: Arc<Mutex<TcpStream>>,
-        responses: Arc<Mutex<Responses>>,
+        tcp_stream: OwnedReadHalf,
+        sender: UnboundedSender<CommandResponse>,
         notify: Arc<Notify>,
     ) -> Result<(), DeviceError> {
         loop {
+            tcp_stream.readable().await?;
+
             let mut buffer = [0u8; 8192];
-            match tcp_stream.lock().await.try_read(&mut buffer) {
+            match tcp_stream.try_read(&mut buffer) {
                 Ok(0) => {
                     // if the connection is closed, return
                     return Ok(());
@@ -268,17 +285,19 @@ impl Device {
                     let entries = data.split_terminator("\r\n");
                     for entry in entries {
                         if let Ok(response) = serde_json::from_str::<CommandResponse>(entry) {
-                            responses.lock().await.add(response);
+                            sender.send(response).unwrap();
                             notify.notify_one();
                         };
 
                         if let Ok(response) = serde_json::from_str::<NotificationResult>(entry) {
                             // TODO: Save properties somewhere
+                            println!("{:?}", response);
                         }
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    println!("waiting for data");
                     continue;
                 }
                 Err(e) => {
@@ -289,11 +308,11 @@ impl Device {
     }
 
     async fn listen_responses_console_error(
-        tcp_stream: Arc<Mutex<TcpStream>>,
-        responses: Arc<Mutex<Responses>>,
+        tcp_stream: OwnedReadHalf,
+        sender: UnboundedSender<CommandResponse>,
         notify: Arc<Notify>,
     ) {
-        match Self::listen_responses(tcp_stream, responses, notify).await {
+        match Self::listen_responses(tcp_stream, sender, notify).await {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("{}", e);
