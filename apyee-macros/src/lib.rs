@@ -196,7 +196,7 @@ fn impl_into_json_value_derive(ast: &syn::DeriveInput) -> TokenStream {
                 let variant_string = variant_name.to_string().to_case(Case::Snake).to_string();
 
                 variant_match_arms.extend(quote_spanned! {variant.span()=>
-                            #name::#variant_name #fields_in_variant => #variant_string.to_string().into(),
+                            #name::#variant_name #fields_in_variant => ::serde_json::Value::String(String::from(#variant_string)),
                 });
             }
         }
