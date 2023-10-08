@@ -1,21 +1,14 @@
-[package]
-name = "apyee"
-version = "0.5.2"
+[workspace]
+resolver = "2"
+members = [
+    "apyee",
+    "apyee-macros",
+]
+
+[workspace.package]
+version = "0.6.0"
 edition = "2021"
 repository = "https://github.com/mztikk/apyee"
 authors = ["Nils Feierabend <mztikk@outlook.de>"]
 license = "MIT"
 description = "yeelight api"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-get_params_derive = { version = "0.6.0" }
-quote = "1.0.21"
-rand = "0.8.5"
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.87"
-serde_variant = "0.1.1"
-syn = "1.0.103"
-thiserror = "1.0.37"
-tokio = { version = "1.21.2", features = ["full"] }

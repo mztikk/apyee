@@ -1,4 +1,4 @@
-use get_params_derive::IntoJsonValue;
+use apyee_macros::IntoJsonValue;
 use serde::{Deserialize, Serialize};
 
 /// Properties of a device.

@@ -1,6 +1,6 @@
 use crate::command::RawCommand;
 use crate::property::Property;
-use get_params_derive::{FromRawCommand, GetParams, IntoJsonValue};
+use apyee_macros::{FromRawCommand, GetParams, IntoJsonValue};
 use serde::{Deserialize, Serialize};
 
 /// Methods to be called on a device.
