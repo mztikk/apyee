@@ -46,8 +46,8 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                             .collect::<Vec<_>>();
 
                         let mut field_names = TokenStream2::new();
-                        let mut vec_inits = TokenStream2::new();
                         let mut vec_extends = TokenStream2::new();
+                        let num_fields = fields.unnamed.len();
                         for field in fields.unnamed.iter() {
                             let field_name = alphabet.remove(0);
                             field_names.extend(quote_spanned! { field.span() =>
@@ -63,8 +63,8 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                     if type_path.clone().into_token_stream().to_string()
                                         == "bool" =>
                                 {
-                                    vec_inits.extend(quote_spanned! {variant.span()=>
-                                        ::serde_json::Value::String(String::from(match #field_name {true => "on", false => "off"})),})
+                                    vec_extends.extend(quote_spanned! {variant.span()=>
+                                        vec.push(::serde_json::Value::String(String::from(match #field_name {true => "on", false => "off"})));})
                                 }
                                 // check if type is a vec
                                 Type::Path(type_path)
@@ -115,26 +115,18 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                     });
                                 }
 
-                                _ => vec_inits.extend(quote_spanned! {variant.span()=>
-                                    ::serde_json::json!(#field_name),}),
+                                _ => vec_extends.extend(quote_spanned! {variant.span()=>
+                                    vec.push(::serde_json::json!(#field_name));})
                             }
                         }
 
-                        if vec_extends.is_empty() {
-                            variant_match_arms.extend(quote_spanned! {variant.span()=>
-                                #name::#variant_name (#field_names) => {
-                                    vec![#vec_inits]
-                                },
-                            });
-                        } else {
-                            variant_match_arms.extend(quote_spanned! {variant.span()=>
-                                        #name::#variant_name (#field_names) => {
-                                            let mut vec = vec![#vec_inits];
-                                            #vec_extends
-                                            vec
-                                        },
-                            });
-                        }
+                        variant_match_arms.extend(quote_spanned! {variant.span()=>
+                                    #name::#variant_name (#field_names) => {
+                                        let mut vec = Vec::with_capacity(#num_fields);
+                                        #vec_extends
+                                        vec
+                                    },
+                        });
                     }
                     Fields::Unit => {
                         variant_match_arms.extend(quote_spanned! {variant.span()=>
