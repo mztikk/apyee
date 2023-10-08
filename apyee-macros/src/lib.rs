@@ -39,17 +39,17 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                 // Variant can be named Unit like `Variant`
                 match &variant.fields {
                     Fields::Unnamed(fields) => {
-                        let mut alphabet = (b'a'..=b'z')
-                            .map(char::from)
-                            .map(String::from)
-                            .map(|s| format_ident!("{}", s))
-                            .collect::<Vec<_>>();
-
                         let mut field_names = TokenStream2::new();
                         let mut vec_extends = TokenStream2::new();
                         let num_fields = fields.unnamed.len();
+                        let mut field_num: usize = 0;
+
+                        let vec_name = format!("__{}_json_values_vec", variant_name.to_string().to_case(Case::Snake));
+                        let vec_identifier = format_ident!("{}", vec_name);
+
                         for field in fields.unnamed.iter() {
-                            let field_name = alphabet.remove(0);
+                            let field_name = format_ident!("{}", format!("__{}", field_num));
+                            field_num += 1;
                             field_names.extend(quote_spanned! { field.span() =>
                                 #field_name,
                             });
@@ -64,7 +64,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         == "bool" =>
                                 {
                                     vec_extends.extend(quote_spanned! {variant.span()=>
-                                        vec.push(::serde_json::Value::String(String::from(match #field_name {true => "on", false => "off"})));})
+                                        #vec_identifier.push(::serde_json::Value::String(String::from(match #field_name {true => "on", false => "off"})));})
                                 }
                                 // check if type is a vec
                                 Type::Path(type_path)
@@ -75,7 +75,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         .starts_with("Vec<") =>
                                 {
                                     vec_extends.extend(quote_spanned! {variant.span()=>
-                                    vec.extend(#field_name.iter().map(serde_json::Value::from));})
+                                        #vec_identifier.extend(#field_name.iter().map(serde_json::Value::from));})
                                 }
                                 Type::Path(type_path)
                                     if type_path
@@ -85,7 +85,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         .starts_with("Vec <") =>
                                 {
                                     vec_extends.extend(quote_spanned! {variant.span()=>
-                                    vec.extend(#field_name.iter().map(serde_json::Value::from));})
+                                        #vec_identifier.extend(#field_name.iter().map(serde_json::Value::from));})
                                 }
                                 // check if type is an option
                                 Type::Path(type_path)
@@ -95,9 +95,10 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         .to_string()
                                         .starts_with("Option <") =>
                                 {
+                                    let field_value_name = format_ident!("{}", format!("{}__some", field_name));
                                     vec_extends.extend(quote_spanned! {variant.span()=>
-                                        if let Some(val) = #field_name {
-                                            vec.push(::serde_json::json!(val));
+                                        if let Some(#field_value_name) = #field_name {
+                                            #vec_identifier.push(::serde_json::json!(#field_value_name));
                                         }
                                     });
                                 }
@@ -108,23 +109,24 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         .to_string()
                                         .starts_with("Option<") =>
                                 {
+                                    let field_value_name = format_ident!("{}", format!("{}__some", field_name));
                                     vec_extends.extend(quote_spanned! {variant.span()=>
-                                        if let Some(val) = #field_name {
-                                            vec.push(::serde_json::json!(val));
+                                        if let Some(#field_value_name) = #field_name {
+                                            #vec_identifier.push(::serde_json::json!(#field_value_name));
                                         }
                                     });
                                 }
 
                                 _ => vec_extends.extend(quote_spanned! {variant.span()=>
-                                    vec.push(::serde_json::json!(#field_name));})
+                                    #vec_identifier.push(::serde_json::json!(#field_name));})
                             }
                         }
 
                         variant_match_arms.extend(quote_spanned! {variant.span()=>
                                     #name::#variant_name (#field_names) => {
-                                        let mut vec = Vec::with_capacity(#num_fields);
+                                        let mut #vec_identifier = Vec::with_capacity(#num_fields);
                                         #vec_extends
-                                        vec
+                                        #vec_identifier
                                     },
                         });
                     }
