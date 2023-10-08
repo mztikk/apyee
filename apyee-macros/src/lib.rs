@@ -64,7 +64,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                         == "bool" =>
                                 {
                                     vec_inits.extend(quote_spanned! {variant.span()=>
-                                    match #field_name {true => "on", false => "off"}.into(),})
+                                        ::serde_json::Value::String(String::from(match #field_name {true => "on", false => "off"})),})
                                 }
                                 // check if type is a vec
                                 Type::Path(type_path)
@@ -97,7 +97,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                 {
                                     vec_extends.extend(quote_spanned! {variant.span()=>
                                         if let Some(val) = #field_name {
-                                            vec.push(val.to_owned().into());
+                                            vec.push(::serde_json::json!(val));
                                         }
                                     });
                                 }
@@ -110,13 +110,13 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                                 {
                                     vec_extends.extend(quote_spanned! {variant.span()=>
                                         if let Some(val) = #field_name {
-                                            vec.push(val.to_owned().into());
+                                            vec.push(::serde_json::json!(val));
                                         }
                                     });
                                 }
 
                                 _ => vec_inits.extend(quote_spanned! {variant.span()=>
-                                #field_name.to_owned().into(),}),
+                                    ::serde_json::json!(#field_name),}),
                             }
                         }
 
