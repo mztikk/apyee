@@ -48,7 +48,7 @@ fn impl_get_params(ast: &syn::DeriveInput) -> TokenStream {
                         let vec_identifier = format_ident!("{}", vec_name);
 
                         for field in fields.unnamed.iter() {
-                            let field_name = format_ident!("{}", format!("__{}", field_num));
+                            let field_name = format_ident!("{}", format!("__{}_{}", variant_name.to_string().to_case(Case::Snake), field_num));
                             field_num += 1;
                             field_names.extend(quote_spanned! { field.span() =>
                                 #field_name,
