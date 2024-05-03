@@ -1,10 +1,25 @@
 use crate::command::RawCommand;
 use crate::property::Property;
-use apyee_macros::{FromRawCommand, GetParams, IntoJsonValue};
+use apyee_macros::{GetParams, IntoJsonValue, TryFromRawCommand};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum MethodParseError {
+    #[error(
+        "Value for non optional field '{field_index} - {field_name}' in '{method_name}' is missing"
+    )]
+    MissingFieldValue {
+        field_index: usize,
+        field_name: String,
+        method_name: String,
+    },
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
 
 /// Methods to be called on a device.
-#[derive(Serialize, Deserialize, Clone, GetParams, PartialEq, Eq, Debug, FromRawCommand)]
+#[derive(Serialize, Deserialize, Clone, GetParams, PartialEq, Eq, Debug, TryFromRawCommand)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
     /// Get the specified property value.
