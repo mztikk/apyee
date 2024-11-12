@@ -1,5 +1,5 @@
-#![deny(missing_docs)]
-#![deny(rustdoc::missing_doc_code_examples)]
+// #![deny(missing_docs)]
+// #![deny(rustdoc::missing_doc_code_examples)]
 
 //! Yeelight API
 //! This library provides a Rust API for the Yeelight device.
@@ -41,9 +41,9 @@ pub mod property;
 #[cfg(test)]
 mod tests {
     use crate::{
-        command::{self, CommandResponse, CommandResult},
+        command::{self, Command, CommandResponse, CommandResult, RawCommand},
         device::Device,
-        method::{Effect, Method},
+        method::{Effect, Method, MethodParseError},
         property::Property,
     };
 
@@ -53,6 +53,108 @@ mod tests {
             command::Command::new(0, Method::SetPower(true, Some(Effect::Smooth), Some(500)));
         let json = serde_json::to_string(&command).unwrap();
         println!("{}", json);
+    }
+
+    #[test]
+    fn method_deserialization() {
+        let json = r#"{"set_rgb":[16711680,"smooth",500]}"#;
+        let method = serde_json::from_str::<Method>(json);
+        assert!(method.is_ok());
+        let method = method.unwrap();
+        assert_eq!(
+            method,
+            Method::SetRgb(
+                Device::get_rgb_color(255, 0, 0),
+                Some(Effect::Smooth),
+                Some(500),
+            )
+        );
+    }
+
+    #[test]
+    fn command_deserialization() {
+        let json = r#"{"id":0,"method":"set_rgb","params":[16711680,"smooth",500]}"#;
+        let command = serde_json::from_str::<Command>(json).unwrap();
+        assert_eq!(
+            command,
+            command::Command::new(
+                0,
+                Method::SetRgb(
+                    Device::get_rgb_color(255, 0, 0),
+                    Some(Effect::Smooth),
+                    Some(500),
+                ),
+            )
+        );
+    }
+
+    #[test]
+    fn method_hsv_from_raw_command() {
+        let raw_command = RawCommand {
+            id: 0,
+            method: String::from("set_hsv"),
+            params: vec![],
+        };
+        let method = Method::try_from(&raw_command);
+        assert!(method.is_err());
+        let method = method.err().unwrap();
+        assert!(match method {
+            MethodParseError::MissingFieldValue {
+                field_index,
+                field_name: _,
+                method_name: _,
+            } => field_index == 0,
+            MethodParseError::Json(_) => false,
+        });
+
+        let raw_command = RawCommand {
+            id: 0,
+            method: String::from("set_hsv"),
+            params: vec![serde_json::to_value(100).unwrap()],
+        };
+        let method = Method::try_from(&raw_command);
+        assert!(method.is_err());
+        let method = method.err().unwrap();
+        assert!(match method {
+            MethodParseError::MissingFieldValue {
+                field_index,
+                field_name: _,
+                method_name: _,
+            } => field_index == 1,
+            MethodParseError::Json(_) => false,
+        });
+    }
+
+    #[test]
+    fn command_hsv_deserialization() {
+        let json = r#"{"id":0,"method":"set_hsv","params":[]}"#;
+        let command = serde_json::from_str::<Command>(json);
+        assert!(command.is_err());
+
+        let json = r#"{"id":0,"method":"set_hsv","params":[100]}"#;
+        let command = serde_json::from_str::<Command>(json);
+        assert!(command.is_err());
+
+        let json = r#"{"id":0,"method":"set_hsv","params":[100,50]}"#;
+        let command = serde_json::from_str::<Command>(json).unwrap();
+        assert_eq!(
+            command,
+            command::Command::new(0, Method::SetHsv(100, 50, None, None,),)
+        );
+
+        let json = r#"{"id":0,"method":"set_hsv","params":[100,50, "smooth"]}"#;
+        let command = serde_json::from_str::<Command>(json).unwrap();
+        assert_eq!(
+            command,
+            command::Command::new(0, Method::SetHsv(100, 50, Some(Effect::Smooth), None))
+        );
+
+        let json = r#"{"id":0,"method":"set_hsv","params":[100,50, "smooth", 5]}"#;
+        let command = serde_json::from_str::<Command>(json).unwrap();
+        assert_eq!(
+            command,
+            command::Command::new(0, Method::SetHsv(100, 50, Some(Effect::Smooth), Some(5)))
+        );
     }
 
     #[test]

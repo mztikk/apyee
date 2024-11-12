@@ -323,3 +323,203 @@ fn impl_from_raw_command_derive(ast: &syn::DeriveInput) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(TryFromRawCommand)]
+pub fn try_from_raw_command_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).unwrap();
+    impl_try_from_raw_command_derive(&ast)
+}
+
+fn impl_try_from_raw_command_derive(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let data = &ast.data;
+
+    let mut method_construction;
+
+    match data {
+        Data::Enum(data_enum) => {
+            method_construction = TokenStream2::new();
+
+            for variant in &data_enum.variants {
+                let variant_name = &variant.ident;
+                let variant_snake_case = variant_name.to_string().to_case(Case::Snake).to_string();
+
+                let mut cc = TokenStream2::new();
+                let mut num_fields = 0;
+                let mut num_mandatory_fields = 0;
+                match &variant.fields {
+                    Fields::Unnamed(fields) => {
+                        num_fields = fields.unnamed.iter().count();
+                        for (_, field) in fields.unnamed.iter().enumerate() {
+                            match &field.ty {
+                                Type::Path(type_path)
+                                    if type_path
+                                        .clone()
+                                        .into_token_stream()
+                                        .to_string()
+                                        .starts_with("Option <") =>
+                                {
+                                    break;
+                                }
+                                _ => {
+                                    num_mandatory_fields += 1;
+                                }
+                            }
+                        }
+                    }
+                    Fields::Unit => {}
+                    _ => todo!(),
+                };
+
+                match &variant.fields {
+                    Fields::Unnamed(fields) => {
+                        let mut i = 0;
+                        while i < num_fields {
+                            let fields = &fields.unnamed;
+                            if i < num_mandatory_fields {
+                                let field = &fields[i];
+
+                                cc.extend(quote_spanned! {variant.span()=>
+                                    #i => Err(MethodParseError::MissingFieldValue { field_index: #i, field_name: String::from(stringify!(#field)), method_name: String::from(stringify!(#variant_name)) }),
+                                });
+                            } else {
+                                let mut field_index = 0;
+                                let mut param_construction = TokenStream2::new();
+                                while field_index < i {
+                                    let field = &fields[field_index];
+                                    match &field.ty {
+                                        Type::Path(type_path)
+                                            if type_path
+                                                .clone()
+                                                .into_token_stream()
+                                                .to_string()
+                                                == "bool" =>
+                                        {
+                                            param_construction.extend(quote_spanned! {variant.span()=>
+                                                match raw.params[#field_index].as_str() { Some("on") => true, Some("off") => false, _ => false },
+                                            });
+                                        }
+                                        Type::Path(type_path)
+                                            if type_path
+                                                .clone()
+                                                .into_token_stream()
+                                                .to_string()
+                                                .starts_with("Option <") =>
+                                        {
+                                            param_construction.extend(quote_spanned! {variant.span()=>
+                                                Some(serde_json::from_value(raw.params[#field_index].to_owned())?),
+                                            });
+                                        }
+                                        _ => {
+                                            param_construction.extend(quote_spanned! {variant.span()=>
+                                                serde_json::from_value(raw.params[#field_index].to_owned())?,
+                                            });
+                                        }
+                                    }
+                                    field_index += 1;
+                                }
+
+                                while field_index < num_fields {
+                                    param_construction.extend(quote_spanned! {variant.span()=>
+                                        None,
+                                    });
+                                    field_index += 1;
+                                }
+
+                                if param_construction.is_empty() {
+                                    cc.extend(quote_spanned! {variant.span()=>
+                                        #i => Ok(#name::#variant_name),
+                                    });
+                                } else {
+                                    cc.extend(quote_spanned! {variant.span()=>
+                                        #i => Ok(#name::#variant_name(#param_construction)),
+                                    });
+                                }
+                            }
+                            i += 1;
+                        }
+
+                        let mut param_construction = TokenStream2::new();
+
+                        for (i, field) in fields.unnamed.iter().enumerate() {
+                            match &field.ty {
+                                Type::Path(type_path)
+                                    if type_path.clone().into_token_stream().to_string()
+                                        == "bool" =>
+                                {
+                                    param_construction.extend(quote_spanned! {variant.span()=>
+                                        match raw.params[#i].as_str() { Some("on") => true, Some("off") => false, _ => false },
+                                    });
+                                }
+                                Type::Path(type_path)
+                                    if type_path
+                                        .clone()
+                                        .into_token_stream()
+                                        .to_string()
+                                        .starts_with("Option <") =>
+                                {
+                                    param_construction.extend(quote_spanned! {variant.span()=>
+                                        Some(serde_json::from_value(raw.params[#i].to_owned())?),
+                                    });
+                                }
+                                _ => {
+                                    param_construction.extend(quote_spanned! {variant.span()=>
+                                        serde_json::from_value(raw.params[#i].to_owned())?,
+                                    });
+                                }
+                            }
+                        }
+
+                        cc.extend(quote_spanned! {variant.span()=>
+                            _ => Ok(#name::#variant_name(#param_construction)),
+                        });
+                    }
+                    Fields::Unit => {}
+                    _ => todo!(),
+                };
+
+                if cc.is_empty() {
+                    method_construction.extend(quote_spanned! {variant.span()=>
+                        #variant_snake_case => Ok(#name::#variant_name),
+                    });
+                } else {
+                    method_construction.extend(quote_spanned! {variant.span()=>
+                        #variant_snake_case => {
+                            match raw.params.len() {
+                                #cc
+                            }
+                        },
+                    });
+                }
+            }
+        }
+        _ => return derive_error!("TryFromRawCommand is only implemented for enums"),
+    };
+
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+
+    let expanded = quote! {
+        impl TryFrom<RawCommand> for #impl_generics #name #ty_generics #where_clause {
+            type Error = MethodParseError;
+
+            fn try_from(raw: RawCommand) -> Result<Self, Self::Error> {
+                match raw.method.as_str() {
+                    #method_construction
+                    _ => panic!("Unknown method"),
+                }
+            }
+        }
+        impl TryFrom<&RawCommand> for #impl_generics #name #ty_generics #where_clause {
+            type Error = MethodParseError;
+
+            fn try_from(raw: &RawCommand) -> Result<Self, Self::Error> {
+                match raw.method.as_str() {
+                    #method_construction
+                    _ => panic!("Unknown method"),
+                }
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}

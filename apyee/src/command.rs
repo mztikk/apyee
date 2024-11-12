@@ -1,4 +1,7 @@
-use crate::{method::Method, property::Property};
+use crate::{
+    method::{Method, MethodParseError},
+    property::Property,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 
@@ -24,7 +27,7 @@ where
 ///
 /// [`Command`]s are created using the [`Command::new`] function.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "snake_case", from = "RawCommand")]
+#[serde(rename_all = "snake_case", try_from = "RawCommand")]
 // TODO: implement custom deserializer to get the method enum values from the params
 pub struct Command {
     /// The unique ID of the command.
@@ -36,16 +39,6 @@ pub struct Command {
     pub params: Vec<serde_json::Value>,
 }
 
-impl From<RawCommand> for Command {
-    fn from(raw: RawCommand) -> Self {
-        Command {
-            id: raw.id,
-            method: Method::from(&raw),
-            params: raw.params,
-        }
-    }
-}
-
 impl Command {
     /// Creates a new command with a unique ID and a [`Method`].
     pub fn new(id: i32, method: Method) -> Self {
@@ -54,6 +47,17 @@ impl Command {
             params: method.get_params(),
             method,
         }
+    }
+}
+
+impl TryFrom<RawCommand> for Command {
+    type Error = MethodParseError;
+    fn try_from(raw: RawCommand) -> Result<Self, Self::Error> {
+        Ok(Command {
+            id: raw.id,
+            method: Method::try_from(&raw)?,
+            params: raw.params,
+        })
     }
 }
 
